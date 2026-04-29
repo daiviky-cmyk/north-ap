@@ -40,9 +40,6 @@ const firebaseConfig = {
   apiKey: "demo",
   authDomain: "demo.firebaseapp.com",
   projectId: "demo-project",
-  storageBucket: "demo.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:demo"
 };
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -102,7 +99,7 @@ export default function App() {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+        if (false) {
           await signInWithCustomToken(auth, __initial_auth_token);
         } else {
           await signInAnonymously(auth);
