@@ -39,7 +39,10 @@ import {
 const firebaseConfig = {
   apiKey: "demo",
   authDomain: "demo.firebaseapp.com",
-  projectId: "demo-project"
+  projectId: "demo-project",
+  storageBucket: "demo.appspot.com",
+  messagingSenderId: "123456789",
+  appId: "1:123456789:web:demo"
 };
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
