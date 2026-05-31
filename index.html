@@ -183,12 +183,26 @@
             };
 
             const totals = useMemo(() => {
-                const base = CRITERIA.reduce((acc, c) => acc + (parseInt(formScores[c.id]) ?? 0), 0);
+                const base = CRITERIA.reduce((acc, c) => acc + (formScores[c.id] !== undefined && formScores[c.id] !== "" ? parseFloat(formScores[c.id]) : 0), 0);
                 const deductions = DEDUCTIONS_LIST.reduce((acc, d) => acc + (formDeductions[d.id] ? d.value : 0), 0);
-                return { base, deductions, final: Math.max(0, base - deductions) };
+                return { 
+                    base: parseFloat(base.toFixed(2)), 
+                    deductions: parseFloat(deductions.toFixed(2)), 
+                    final: Math.max(0, parseFloat((base - deductions).toFixed(2))) 
+                };
             }, [formScores, formDeductions]);
 
-            const isFormIncomplete = useMemo(() => CRITERIA.some(c => formScores[c.id] === undefined || formScores[c.id] === null), [formScores]);
+            const isFormIncomplete = useMemo(() => CRITERIA.some(c => formScores[c.id] === undefined || formScores[c.id] === null || formScores[c.id] === ""), [formScores]);
+
+            const handleValueChange = (criterionId, val) => {
+                if (val === "" || val === undefined || val === null || isNaN(val)) {
+                    setFormScores(prev => ({ ...prev, [criterionId]: "" }));
+                    return;
+                }
+                // Clampa el valor entre 0.00 y 2.00 y redondea matemáticamente a centésimos exactos
+                const clamped = Math.max(0, Math.min(2, Math.round(val * 100) / 100));
+                setFormScores(prev => ({ ...prev, [criterionId]: clamped.toFixed(2) }));
+            };
 
             const addSingleParticipant = async () => {
                 if (!newParticipantName.trim()) return;
@@ -356,16 +370,93 @@
                                         {['Desempeño', 'Habilidades'].map(section => (
                                             <div key={section} className="space-y-6">
                                                 <h3 className="text-[9px] font-black uppercase text-slate-400 tracking-[0.5em] border-b border-slate-50 pb-2">{section}</h3>
-                                                {CRITERIA.filter(c => section === c.section).map(c => (
-                                                    <div key={c.id} className="space-y-4">
-                                                        <label className="text-sm font-black text-slate-700 block tracking-tight leading-tight">{c.label}</label>
-                                                        <div className="flex gap-2">
-                                                            {[0, 1, 2].map(num => (
-                                                                <button key={num} onClick={() => setFormScores({...formScores, [c.id]: num})} className={`flex-1 py-4 rounded-2xl font-black text-xl transition-all ${formScores[c.id] === num ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400 border border-slate-100 hover:bg-slate-100'}`}>{num}</button>
-                                                            ))}
+                                                {CRITERIA.filter(c => section === c.section).map(c => {
+                                                    const val = formScores[c.id];
+                                                    const isSet = val !== undefined && val !== null && val !== "";
+                                                    return (
+                                                        <div key={c.id} className="space-y-4 bg-slate-50/50 p-5 rounded-3xl border border-slate-100">
+                                                            <div className="flex justify-between items-center">
+                                                                <label className="text-sm font-black text-slate-700 block tracking-tight leading-tight">{c.label}</label>
+                                                                <span className="text-2xl font-black text-indigo-600 tabular-nums">
+                                                                    {isSet ? parseFloat(val).toFixed(2) : "0.00"}
+                                                                </span>
+                                                            </div>
+                                                            
+                                                            <div className="flex items-center gap-3">
+                                                                {/* Botón decremento rápido */}
+                                                                <button 
+                                                                    type="button"
+                                                                    onClick={() => handleValueChange(c.id, isSet ? parseFloat(val) - 0.01 : 1.00)}
+                                                                    className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 w-12 h-12 rounded-2xl flex items-center justify-center font-black text-2xl shadow-sm active:scale-95 transition-all select-none"
+                                                                >
+                                                                    -
+                                                                </button>
+                                                                
+                                                                {/* Caja de entrada directa con filtrado en tiempo real */}
+                                                                <input 
+                                                                    type="text" 
+                                                                    inputMode="decimal" 
+                                                                    placeholder="0.00"
+                                                                    value={isSet ? val : ""} 
+                                                                    onChange={(e) => {
+                                                                        let rawVal = e.target.value;
+                                                                        // Cambia coma por punto inmediatamente para cálculos sanos
+                                                                        rawVal = rawVal.replace(',', '.');
+                                                                        
+                                                                        if (rawVal === "") {
+                                                                            setFormScores(prev => ({ ...prev, [c.id]: "" }));
+                                                                            return;
+                                                                        }
+                                                                        
+                                                                        if (rawVal === ".") {
+                                                                            setFormScores(prev => ({ ...prev, [c.id]: "0." }));
+                                                                            return;
+                                                                        }
+
+                                                                        // Filtramos cualquier caracter extraño que no sea número o un solo punto
+                                                                        const cleanVal = rawVal.replace(/[^0-9.]/g, '');
+                                                                        const parts = cleanVal.split('.');
+                                                                        if (parts.length > 2) return; // previene dobles puntos
+
+                                                                        // Bloqueamos el tipeo si intentan meter un tercer decimal
+                                                                        if (parts[1] && parts[1].length > 2) {
+                                                                            return;
+                                                                        }
+
+                                                                        const parsed = parseFloat(cleanVal);
+                                                                        if (!isNaN(parsed)) {
+                                                                            if (parsed > 2.0) {
+                                                                                // Si escribe 9, 90, 3, etc., se autocorrige instantáneamente a 2.00
+                                                                                setFormScores(prev => ({ ...prev, [c.id]: "2.00" }));
+                                                                            } else {
+                                                                                setFormScores(prev => ({ ...prev, [c.id]: cleanVal }));
+                                                                            }
+                                                                        }
+                                                                    }}
+                                                                    onFocus={(e) => e.target.select()} // Selecciona todo al tocar la caja (UX limpia)
+                                                                    onBlur={() => {
+                                                                        const currentVal = formScores[c.id];
+                                                                        if (currentVal === undefined || currentVal === null || currentVal === "" || isNaN(parseFloat(currentVal))) {
+                                                                            handleValueChange(c.id, 0.00);
+                                                                        } else {
+                                                                            handleValueChange(c.id, parseFloat(currentVal));
+                                                                        }
+                                                                    }}
+                                                                    className="flex-1 bg-white border-2 border-slate-200 rounded-2xl h-12 text-center font-black text-2xl text-slate-800 focus:border-indigo-500 outline-none transition-all"
+                                                                />
+                                                                
+                                                                {/* Botón incremento rápido */}
+                                                                <button 
+                                                                    type="button"
+                                                                    onClick={() => handleValueChange(c.id, isSet ? parseFloat(val) + 0.01 : 1.00)}
+                                                                    className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 w-12 h-12 rounded-2xl flex items-center justify-center font-black text-2xl shadow-sm active:scale-95 transition-all select-none"
+                                                                >
+                                                                    +
+                                                                </button>
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                ))}
+                                                    );
+                                                })}
                                             </div>
                                         ))}
                                         <div className="bg-red-50/40 p-6 rounded-[2.5rem] border border-red-100 space-y-5">
@@ -381,7 +472,7 @@
                                         </div>
                                         <div className="pt-8 border-t sticky bottom-0 bg-white pb-4 z-10">
                                             <div className="space-y-1 mb-6 px-1">
-                                                <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-slate-400"><span>Puntaje Base</span><span>{totals.base} / 20</span></div>
+                                                <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-slate-400"><span>Puntaje Base</span><span>{totals.base.toFixed(2)} / 20.00</span></div>
                                                 <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-red-500/70"><span>Penalizaciones</span><span>-{totals.deductions.toFixed(2)}</span></div>
                                                 <div className="flex justify-between items-end mt-4 pt-3 border-t border-slate-100">
                                                     <span className="font-black text-slate-400 uppercase text-[10px] tracking-widest">Total</span>
@@ -468,7 +559,7 @@
                                                         <td className="p-4 text-slate-400 uppercase tracking-tighter">{s.jurorName}</td>
                                                         <td className="p-4"><span className="bg-indigo-500/20 text-indigo-400 px-3 py-1 rounded-full text-[8px] uppercase font-black tracking-tighter">{s.category}</span></td>
                                                         <td className="p-4 text-white text-xs leading-none">{s.participantName}</td>
-                                                        <td className="p-4 text-right text-slate-400">{s.baseScore}</td>
+                                                        <td className="p-4 text-right text-slate-400">{s.baseScore?.toFixed(2)}</td>
                                                         <td className="p-4 text-right text-red-400">-{s.totalDeductions?.toFixed(2)}</td>
                                                         <td className="p-4 text-right font-black text-indigo-400 text-sm tabular-nums">{s.total?.toFixed(2)}</td>
                                                     </tr>
@@ -492,7 +583,7 @@
                                                 <div className="space-y-4">
                                                     {top3.map((p, idx) => (
                                                         <div key={p.id} className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 flex items-center gap-6">
-                                                            <div className={`w-14 h-14 rounded-3xl flex items-center justify-center font-black text-2xl shadow-lg ${idx === 0 ? 'bg-yellow-400 text-white shadow-yellow-200' : idx === 1 ? 'bg-slate-200 text-slate-500 shadow-slate-100' : 'bg-slate-50 text-slate-300 shadow-none'}`}>
+                                                            <div className="w-14 h-14 rounded-3xl flex items-center justify-center font-black text-2xl shadow-lg bg-yellow-400 text-white">
                                                                 {idx + 1}
                                                             </div>
                                                             <div className="flex-1">
