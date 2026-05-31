@@ -29,12 +29,10 @@
     <script type="text/babel" data-type="module">
         const { useState, useEffect, useMemo } = React;
 
-        // --- FIREBASE IMPORTS (Vía CDN Modular) ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getFirestore, collection, doc, setDoc, onSnapshot, serverTimestamp, addDoc, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
-        // --- ICONOS SVG ---
         const Icon = ({ path, size = 24, className = "" }) => (
             <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
                 {path}
@@ -54,12 +52,11 @@
         const Plus = (props) => <Icon {...props} path={<><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></>} />;
         const ClipboardList = (props) => <Icon {...props} path={<><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></>} />;
         const UploadCloud = (props) => <Icon {...props} path={<><path d="m16 13-4-4-4 4"/><path d="M12 9v9"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/><path d="M12 13v9"/></>} />;
-        const Trash2 = (props) => <Icon {...props} path={<><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></>} />;
+        const Trash2 = (props) => <Icon {...props} path={<><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 2-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></>} />;
         const Users = (props) => <Icon {...props} path={<><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>} />;
         const Search = (props) => <Icon {...props} path={<><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/></>} />;
         const BarChart3 = (props) => <Icon {...props} path={<><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></>} />;
 
-        // --- CONFIG ---
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
             apiKey: "", authDomain: "", projectId: "", storageBucket: "", messagingSenderId: "", appId: ""
         };
@@ -82,6 +79,7 @@
             { id: 'variedad', label: 'V. Variedad de Estilo', max: 2, section: 'Habilidades' },
         ];
 
+        // Penalizaciones ajustadas con valores en múltiplos de 0.05 y 0.10
         const DEDUCTIONS_LIST = [
             { id: 'miembros_inicio', label: 'Miembros no en escenario al inicio', value: 1.00 },
             { id: 'caida_mayor', label: 'Caída grado mayor', value: 0.10 },
@@ -183,7 +181,12 @@
             };
 
             const totals = useMemo(() => {
-                const base = CRITERIA.reduce((acc, c) => acc + (formScores[c.id] !== undefined && formScores[c.id] !== "" ? parseFloat(formScores[c.id]) : 0), 0);
+                const base = CRITERIA.reduce((acc, c) => {
+                    const scoreVal = formScores[c.id];
+                    if (scoreVal === undefined || scoreVal === null || scoreVal === "") return acc;
+                    const parsed = parseFloat(scoreVal);
+                    return acc + (isNaN(parsed) ? 0 : parsed);
+                }, 0);
                 const deductions = DEDUCTIONS_LIST.reduce((acc, d) => acc + (formDeductions[d.id] ? d.value : 0), 0);
                 return { 
                     base: parseFloat(base.toFixed(2)), 
@@ -192,15 +195,25 @@
                 };
             }, [formScores, formDeductions]);
 
-            const isFormIncomplete = useMemo(() => CRITERIA.some(c => formScores[c.id] === undefined || formScores[c.id] === null || formScores[c.id] === ""), [formScores]);
+            const isFormIncomplete = useMemo(() => {
+                return CRITERIA.some(c => {
+                    const sVal = formScores[c.id];
+                    return sVal === undefined || sVal === null || sVal === "" || isNaN(parseFloat(sVal));
+                });
+            }, [formScores]);
 
             const handleValueChange = (criterionId, val) => {
-                if (val === "" || val === undefined || val === null || isNaN(val)) {
+                if (val === "" || val === undefined || val === null) {
                     setFormScores(prev => ({ ...prev, [criterionId]: "" }));
                     return;
                 }
-                // Clampa el valor entre 0.00 y 2.00 y redondea matemáticamente a centésimos exactos
-                const clamped = Math.max(0, Math.min(2, Math.round(val * 100) / 100));
+                const parsed = parseFloat(val);
+                if (isNaN(parsed)) {
+                    setFormScores(prev => ({ ...prev, [criterionId]: "" }));
+                    return;
+                }
+                // Clampa entre 0.00 y 2.00 y redondea a centésimos exactos
+                const clamped = Math.max(0, Math.min(2, Math.round(parsed * 100) / 100));
                 setFormScores(prev => ({ ...prev, [criterionId]: clamped.toFixed(2) }));
             };
 
@@ -242,13 +255,22 @@
             const saveScore = async (isEdit = false) => {
                 if (!selectedGroup || !user) return;
                 const scoreId = `${selectedGroup.id}_${currentUserData.id}`;
+                
+                // Formateamos todos los valores de criterios evaluados a formato de dos decimales limpios
+                const cleanScores = {};
+                CRITERIA.forEach(c => {
+                    const rawVal = formScores[c.id];
+                    const parsed = parseFloat(rawVal);
+                    cleanScores[c.id] = (!isNaN(parsed)) ? parseFloat(parsed.toFixed(2)) : 0.00;
+                });
+
                 const payload = {
                     participantId: selectedGroup.id,
                     participantName: selectedGroup.name,
                     category: selectedGroup.category,
                     jurorId: currentUserData.id,
                     jurorName: currentUserData.name,
-                    values: formScores,
+                    values: cleanScores,
                     deductions: formDeductions,
                     baseScore: totals.base,
                     totalDeductions: totals.deductions,
@@ -347,7 +369,18 @@
                                     {participants.filter(p => p.category === selectedCategory).map(p => {
                                         const voted = scores.find(s => s.participantId === p.id && s.jurorId === currentUserData?.id);
                                         return (
-                                            <button key={p.id} onClick={() => { setSelectedGroup(p); setFormScores(voted?.values || {}); setFormDeductions(voted?.deductions || {}); setView('form'); }} className={`w-full p-6 rounded-3xl flex justify-between items-center border-2 transition-all ${voted ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-100 shadow-sm'}`}>
+                                            <button key={p.id} onClick={() => { 
+                                                setSelectedGroup(p); 
+                                                // Mantenemos los valores en string limpios al cargar
+                                                const initialScores = {};
+                                                CRITERIA.forEach(c => {
+                                                    const prevScore = voted?.values?.[c.id];
+                                                    initialScores[c.id] = (prevScore !== undefined && prevScore !== null) ? parseFloat(prevScore).toFixed(2) : "";
+                                                });
+                                                setFormScores(initialScores); 
+                                                setFormDeductions(voted?.deductions || {}); 
+                                                setView('form'); 
+                                            }} className={`w-full p-6 rounded-3xl flex justify-between items-center border-2 transition-all ${voted ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-100 shadow-sm'}`}>
                                                 <div className="text-left font-black text-xl text-slate-800">{p.name} {voted && <div className="text-[9px] font-black text-indigo-600 uppercase mt-1 flex items-center gap-1"><CheckCircle2 size={12}/> Listo</div>}</div>
                                                 <ChevronRight className="text-slate-200" />
                                             </button>
@@ -358,6 +391,7 @@
                             </div>
                         )}
 
+                        {}
                         {view === 'form' && selectedGroup && (
                             <div className="space-y-8 animate-in">
                                 <button onClick={() => setView('groups')} className="flex items-center gap-2 text-indigo-600 font-black text-[10px] uppercase mb-6"><ChevronLeft size={16}/> Atrás</button>
@@ -371,84 +405,91 @@
                                             <div key={section} className="space-y-6">
                                                 <h3 className="text-[9px] font-black uppercase text-slate-400 tracking-[0.5em] border-b border-slate-50 pb-2">{section}</h3>
                                                 {CRITERIA.filter(c => section === c.section).map(c => {
-                                                    const val = formScores[c.id];
-                                                    const isSet = val !== undefined && val !== null && val !== "";
+                                                    const rawValue = formScores[c.id];
+                                                    const parsedVal = parseFloat(rawValue);
+                                                    const isSet = rawValue !== undefined && rawValue !== null && rawValue !== "" && !isNaN(parsedVal);
                                                     return (
                                                         <div key={c.id} className="space-y-4 bg-slate-50/50 p-5 rounded-3xl border border-slate-100">
                                                             <div className="flex justify-between items-center">
                                                                 <label className="text-sm font-black text-slate-700 block tracking-tight leading-tight">{c.label}</label>
                                                                 <span className="text-2xl font-black text-indigo-600 tabular-nums">
-                                                                    {isSet ? parseFloat(val).toFixed(2) : "0.00"}
+                                                                    {isSet ? parsedVal.toFixed(2) : "0.00"}
                                                                 </span>
                                                             </div>
                                                             
                                                             <div className="flex items-center gap-3">
-                                                                {/* Botón decremento rápido */}
+                                                                {/* Botón de decremento de a 0.01 */}
                                                                 <button 
                                                                     type="button"
-                                                                    onClick={() => handleValueChange(c.id, isSet ? parseFloat(val) - 0.01 : 1.00)}
+                                                                    onClick={() => {
+                                                                        const current = isSet ? parsedVal : 0.00;
+                                                                        handleValueChange(c.id, current - 0.01);
+                                                                    }}
                                                                     className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 w-12 h-12 rounded-2xl flex items-center justify-center font-black text-2xl shadow-sm active:scale-95 transition-all select-none"
                                                                 >
                                                                     -
                                                                 </button>
                                                                 
-                                                                {/* Caja de entrada directa con filtrado en tiempo real */}
+                                                                {/* Caja de texto directo para introducir centésimos sin errores */}
                                                                 <input 
                                                                     type="text" 
                                                                     inputMode="decimal" 
                                                                     placeholder="0.00"
-                                                                    value={isSet ? val : ""} 
+                                                                    value={rawValue !== undefined ? rawValue : ""} 
                                                                     onChange={(e) => {
-                                                                        let rawVal = e.target.value;
-                                                                        // Cambia coma por punto inmediatamente para cálculos sanos
-                                                                        rawVal = rawVal.replace(',', '.');
+                                                                        let inputVal = e.target.value;
+                                                                        // Cambiamos coma a punto al vuelo de forma transparente para evitar errores de NaN
+                                                                        inputVal = inputVal.replace(',', '.');
                                                                         
-                                                                        if (rawVal === "") {
+                                                                        if (inputVal === "") {
                                                                             setFormScores(prev => ({ ...prev, [c.id]: "" }));
                                                                             return;
                                                                         }
                                                                         
-                                                                        if (rawVal === ".") {
+                                                                        if (inputVal === ".") {
                                                                             setFormScores(prev => ({ ...prev, [c.id]: "0." }));
                                                                             return;
                                                                         }
 
-                                                                        // Filtramos cualquier caracter extraño que no sea número o un solo punto
-                                                                        const cleanVal = rawVal.replace(/[^0-9.]/g, '');
-                                                                        const parts = cleanVal.split('.');
-                                                                        if (parts.length > 2) return; // previene dobles puntos
+                                                                        // Filtramos cualquier caracter no numérico
+                                                                        const clean = inputVal.replace(/[^0-9.]/g, '');
+                                                                        const parts = clean.split('.');
+                                                                        if (parts.length > 2) return; // bloquea doble punto
 
-                                                                        // Bloqueamos el tipeo si intentan meter un tercer decimal
+                                                                        // Evitamos que tipeen más de 2 decimales
                                                                         if (parts[1] && parts[1].length > 2) {
                                                                             return;
                                                                         }
 
-                                                                        const parsed = parseFloat(cleanVal);
-                                                                        if (!isNaN(parsed)) {
-                                                                            if (parsed > 2.0) {
-                                                                                // Si escribe 9, 90, 3, etc., se autocorrige instantáneamente a 2.00
+                                                                        const parsedNum = parseFloat(clean);
+                                                                        if (!isNaN(parsedNum)) {
+                                                                            if (parsedNum > 2.0) {
+                                                                                // Autocorrección instantánea si escriben un número mayor a 2
                                                                                 setFormScores(prev => ({ ...prev, [c.id]: "2.00" }));
                                                                             } else {
-                                                                                setFormScores(prev => ({ ...prev, [c.id]: cleanVal }));
+                                                                                setFormScores(prev => ({ ...prev, [c.id]: clean }));
                                                                             }
                                                                         }
                                                                     }}
-                                                                    onFocus={(e) => e.target.select()} // Selecciona todo al tocar la caja (UX limpia)
+                                                                    onFocus={(e) => e.target.select()} // Al tocar, selecciona todo el texto para reescribir velozmente
                                                                     onBlur={() => {
-                                                                        const currentVal = formScores[c.id];
-                                                                        if (currentVal === undefined || currentVal === null || currentVal === "" || isNaN(parseFloat(currentVal))) {
+                                                                        const raw = formScores[c.id];
+                                                                        if (raw === undefined || raw === null || raw === "" || isNaN(parseFloat(raw))) {
                                                                             handleValueChange(c.id, 0.00);
                                                                         } else {
-                                                                            handleValueChange(c.id, parseFloat(currentVal));
+                                                                            handleValueChange(c.id, parseFloat(raw));
                                                                         }
                                                                     }}
                                                                     className="flex-1 bg-white border-2 border-slate-200 rounded-2xl h-12 text-center font-black text-2xl text-slate-800 focus:border-indigo-500 outline-none transition-all"
                                                                 />
                                                                 
-                                                                {/* Botón incremento rápido */}
+                                                                {/* Botón de incremento de a 0.01 */}
                                                                 <button 
                                                                     type="button"
-                                                                    onClick={() => handleValueChange(c.id, isSet ? parseFloat(val) + 0.01 : 1.00)}
+                                                                    onClick={() => {
+                                                                        const current = isSet ? parsedVal : 0.00;
+                                                                        handleValueChange(c.id, current + 0.01);
+                                                                    }}
                                                                     className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 w-12 h-12 rounded-2xl flex items-center justify-center font-black text-2xl shadow-sm active:scale-95 transition-all select-none"
                                                                 >
                                                                     +
@@ -459,6 +500,8 @@
                                                 })}
                                             </div>
                                         ))}
+
+                                        {}
                                         <div className="bg-red-50/40 p-6 rounded-[2.5rem] border border-red-100 space-y-5">
                                             <h3 className="text-[9px] font-black uppercase text-red-500 tracking-[0.5em] flex items-center gap-2"><MinusCircle size={14}/> Penalizaciones</h3>
                                             <div className="space-y-2">
@@ -470,6 +513,7 @@
                                                 ))}
                                             </div>
                                         </div>
+
                                         <div className="pt-8 border-t sticky bottom-0 bg-white pb-4 z-10">
                                             <div className="space-y-1 mb-6 px-1">
                                                 <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-slate-400"><span>Puntaje Base</span><span>{totals.base.toFixed(2)} / 20.00</span></div>
@@ -499,6 +543,7 @@
                             </div>
                         )}
 
+                        {}
                         {view === 'admin' && (
                             <div className="space-y-12 pb-20 animate-in">
                                 <div className="bg-white p-8 rounded-[3rem] border border-slate-200 shadow-xl space-y-8">
